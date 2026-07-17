@@ -89,14 +89,6 @@ export class TestRailClient {
             url += `&section_id=${sectionId}`;
         }
 
-        // Extract suite_id from filter and append directly to URL
-        // (required for multi-suite projects, suite_mode=3)
-        if (filter && filter.suite_id) {
-            url += `&suite_id=${encodeURIComponent(filter.suite_id)}`;
-            const { suite_id, ...remainingFilter } = filter;
-            filter = remainingFilter;
-        }
-
         if (filter) {
             for (const [key, value] of Object.entries(filter)) {
                 url += `&${key}=${encodeURIComponent(value)}`;
@@ -235,14 +227,7 @@ export class TestRailClient {
 
     async getProjects(): Promise<Project[]> {
         if (!this.projectsPromise) {
-            this.projectsPromise = this.get<any>(`${API_BASE_V2}/get_projects`)
-                .then(response => {
-                    // Handle older TestRail versions that return a flat array
-                    if (Array.isArray(response)) {
-                        return response;
-                    }
-                    return response.projects;
-                });
+            this.projectsPromise = this.paginateAll<Project>(`${API_BASE_V2}/get_projects`, 'projects');
         }
         return this.projectsPromise;
     }

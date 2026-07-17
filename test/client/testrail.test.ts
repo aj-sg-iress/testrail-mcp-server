@@ -502,7 +502,7 @@ describe('TestRailClient', () => {
         const mockProjects = [{ id: 1, name: 'Project 1' }];
         fetchMock.mockResolvedValue({
             ok: true,
-            json: async () => ({ projects: mockProjects })
+            json: async () => ({ projects: mockProjects, _links: { next: null } })
         });
 
         const result = await client.getProjects();
@@ -517,7 +517,7 @@ describe('TestRailClient', () => {
         const mockProjects = [{ id: 1, name: 'Project 1' }];
         fetchMock.mockResolvedValue({
             ok: true,
-            json: async () => ({ projects: mockProjects })
+            json: async () => ({ projects: mockProjects, _links: { next: null } })
         });
 
         await client.getProjects();
@@ -1229,7 +1229,7 @@ describe('TestRailClient', () => {
         );
     });
 
-    test('getCases extracts suite_id from filter and appends to URL separately', async () => {
+    test('getCases with suite_id in filter appends it via generic filter loop', async () => {
         fetchMock.mockResolvedValue({
             ok: true,
             json: async () => ({ cases: [], _links: { next: null } })
@@ -1242,7 +1242,7 @@ describe('TestRailClient', () => {
         );
     });
 
-    test('getCases with suite_id only in filter builds correct URL', async () => {
+    test('getCases with suite_id and sectionId builds correct URL', async () => {
         fetchMock.mockResolvedValue({
             ok: true,
             json: async () => ({ cases: [], _links: { next: null } })
@@ -1276,6 +1276,12 @@ describe('TestRailClient', () => {
         // Verify getSections was called with suite_id
         expect(fetchMock).toHaveBeenCalledWith(
             'https://testrail.io/index.php?/api/v2/get_sections/1&suite_id=5',
+            expect.any(Object)
+        );
+
+        // Verify getCases calls also include suite_id in filter (not stripped)
+        expect(fetchMock).toHaveBeenCalledWith(
+            expect.stringContaining('suite_id=5&priority_id=1'),
             expect.any(Object)
         );
     });
