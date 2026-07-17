@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- **Multi-Suite Project Support**: Added support for retrieving test cases and sections from projects that use multiple test suites. Users can now pass an optional `suite_id` parameter to the `get_cases` and `get_sections` tools.
+- **Older TestRail API Support**: Improved backward compatibility to support paginating lists on older TestRail instances (pre-version 7.x).
+
 ## [2.0.0]
 
 ### Breaking
