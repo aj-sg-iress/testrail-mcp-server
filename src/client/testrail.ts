@@ -54,7 +54,9 @@ export class TestRailClient {
     }
 
     async getCasesRecursively(projectId: number, sectionId: number, filter?: Record<string, string>, excludedSectionNames?: string[]): Promise<Case[]> {
-        const sections = await this.getSections(projectId);
+        // Extract suite_id from filter if present, for getSections call
+        const suiteId = filter?.suite_id ? parseInt(filter.suite_id) : undefined;
+        const sections = await this.getSections(projectId, suiteId);
 
         const sectionIds = this.getSubSectionIds(sections, sectionId, excludedSectionNames);
 
@@ -163,8 +165,11 @@ export class TestRailClient {
         return this.post<Run>(`${API_BASE_V2}/update_run/${runId}`, fields);
     }
 
-    async getSections(projectId: number): Promise<Section[]> {
-        const url = `${API_BASE_V2}/get_sections/${projectId}`;
+    async getSections(projectId: number, suiteId?: number): Promise<Section[]> {
+        let url = `${API_BASE_V2}/get_sections/${projectId}`;
+        if (suiteId) {
+            url += `&suite_id=${suiteId}`;
+        }
         return this.paginateAll<Section>(url, 'sections');
     }
 
@@ -222,8 +227,7 @@ export class TestRailClient {
 
     async getProjects(): Promise<Project[]> {
         if (!this.projectsPromise) {
-            this.projectsPromise = this.get<{ projects: Project[] }>(`${API_BASE_V2}/get_projects`)
-                .then(response => response.projects);
+            this.projectsPromise = this.paginateAll<Project>(`${API_BASE_V2}/get_projects`, 'projects');
         }
         return this.projectsPromise;
     }
@@ -313,6 +317,14 @@ export class TestRailClient {
 
         while (nextUrl) {
             const response: any = await this.get<any>(nextUrl);
+
+            // Handle older TestRail versions (pre-7.x) that return flat arrays
+            // instead of paginated objects like { "suites": [...], "_links": {...} }
+            if (Array.isArray(response)) {
+                allItems.push(...response);
+                break;
+            }
+
             if (response[dataKey] && Array.isArray(response[dataKey])) {
                 allItems.push(...response[dataKey]);
             }

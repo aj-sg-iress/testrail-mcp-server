@@ -1,10 +1,10 @@
 import { jest } from '@jest/globals';
-import { validateCaseFields } from "../../src/utils/validator.js";
+import { validateCaseFields, validateSuiteId } from "../../src/utils/validator.js";
 import { TestRailClient } from "../../src/client/testrail.js";
 
 jest.mock("../../src/client/testrail.js");
 
-import { CaseField } from "../../src/types/testrail.js";
+import { CaseField } from "../../src/tools/cases/types.js";
 
 describe("validateCaseFields", () => {
     let mockCaseFields: CaseField[];
@@ -95,5 +95,67 @@ describe("validateCaseFields", () => {
     it("should accumulate multiple invalid fields in the error message", () => {
         const fields = ["title", "invalid_1", "invalid_2"];
         expect(() => validateCaseFields(fields, mockCaseFields)).toThrow(/Invalid fields provided: 'invalid_1', 'invalid_2'/);
+    });
+});
+
+
+describe("validateSuiteId", () => {
+    let mockClient: any;
+
+    beforeEach(() => {
+        mockClient = {
+            getProject: jest.fn<any>(),
+        };
+    });
+
+    it("should not throw when suite_id is provided", async () => {
+        // Should not even call getProject when suite_id is provided
+        await expect(validateSuiteId(mockClient, 10, 123)).resolves.toBeUndefined();
+        expect(mockClient.getProject).not.toHaveBeenCalled();
+    });
+
+    it("should not throw when project is single-suite (suite_mode=1)", async () => {
+        mockClient.getProject.mockResolvedValue({
+            id: 53,
+            name: "Single Suite Project",
+            is_completed: false,
+            suite_mode: 1,
+        });
+
+        await expect(validateSuiteId(mockClient, 53, undefined)).resolves.toBeUndefined();
+        expect(mockClient.getProject).toHaveBeenCalledWith(53);
+    });
+
+    it("should not throw when project is baseline (suite_mode=2)", async () => {
+        mockClient.getProject.mockResolvedValue({
+            id: 50,
+            name: "Baseline Project",
+            is_completed: false,
+            suite_mode: 2,
+        });
+
+        await expect(validateSuiteId(mockClient, 50, undefined)).resolves.toBeUndefined();
+        expect(mockClient.getProject).toHaveBeenCalledWith(50);
+    });
+
+    it("should throw when project is multi-suite (suite_mode=3) and suite_id is missing", async () => {
+        mockClient.getProject.mockResolvedValue({
+            id: 10,
+            name: "Sandbox",
+            is_completed: false,
+            suite_mode: 3,
+        });
+
+        await expect(validateSuiteId(mockClient, 10, undefined)).rejects.toThrow(
+            'Project "Sandbox" (id: 10) uses multiple test suites (suite_mode=3). ' +
+            'The suite_id parameter is required. Use get_suites to find available suites for this project.'
+        );
+        expect(mockClient.getProject).toHaveBeenCalledWith(10);
+    });
+
+    it("should not throw when project is multi-suite but suite_id is provided", async () => {
+        // suite_id provided means early return, no getProject call
+        await expect(validateSuiteId(mockClient, 10, 9308)).resolves.toBeUndefined();
+        expect(mockClient.getProject).not.toHaveBeenCalled();
     });
 });

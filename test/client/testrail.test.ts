@@ -502,7 +502,7 @@ describe('TestRailClient', () => {
         const mockProjects = [{ id: 1, name: 'Project 1' }];
         fetchMock.mockResolvedValue({
             ok: true,
-            json: async () => ({ projects: mockProjects })
+            json: async () => ({ projects: mockProjects, _links: { next: null } })
         });
 
         const result = await client.getProjects();
@@ -517,7 +517,7 @@ describe('TestRailClient', () => {
         const mockProjects = [{ id: 1, name: 'Project 1' }];
         fetchMock.mockResolvedValue({
             ok: true,
-            json: async () => ({ projects: mockProjects })
+            json: async () => ({ projects: mockProjects, _links: { next: null } })
         });
 
         await client.getProjects();
@@ -1211,6 +1211,250 @@ describe('TestRailClient', () => {
         expect(fetchMock).toHaveBeenCalledWith(
             'https://testrail.io/index.php?/api/v2/get_configs/1',
             expect.objectContaining({ method: 'GET' })
+        );
+    });
+
+    test('getSections with suiteId appends suite_id to URL', async () => {
+        const mockSections = [{ id: 1, name: 'Section 1' }];
+        fetchMock.mockResolvedValue({
+            ok: true,
+            json: async () => ({ sections: mockSections })
+        });
+
+        const result = await client.getSections(1, 10);
+        expect(result).toEqual(mockSections);
+        expect(fetchMock).toHaveBeenCalledWith(
+            'https://testrail.io/index.php?/api/v2/get_sections/1&suite_id=10',
+            expect.any(Object)
+        );
+    });
+
+    test('getCases with suite_id in filter appends it via generic filter loop', async () => {
+        fetchMock.mockResolvedValue({
+            ok: true,
+            json: async () => ({ cases: [], _links: { next: null } })
+        });
+
+        await client.getCases(1, undefined, { suite_id: '5', priority_id: '2' });
+        expect(fetchMock).toHaveBeenCalledWith(
+            'https://testrail.io/index.php?/api/v2/get_cases/1&suite_id=5&priority_id=2',
+            expect.any(Object)
+        );
+    });
+
+    test('getCases with suite_id and sectionId builds correct URL', async () => {
+        fetchMock.mockResolvedValue({
+            ok: true,
+            json: async () => ({ cases: [], _links: { next: null } })
+        });
+
+        await client.getCases(1, 3, { suite_id: '7' });
+        expect(fetchMock).toHaveBeenCalledWith(
+            'https://testrail.io/index.php?/api/v2/get_cases/1&section_id=3&suite_id=7',
+            expect.any(Object)
+        );
+    });
+
+    test('getCasesRecursively extracts suite_id from filter for getSections call', async () => {
+        const mockSections: Section[] = [
+            { id: 1, name: 'Root', parent_id: null, suite_id: 5, description: '' },
+            { id: 2, name: 'Child', parent_id: 1, suite_id: 5, description: '' },
+        ];
+
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({ sections: mockSections })
+        });
+
+        fetchMock.mockResolvedValue({
+            ok: true,
+            json: async () => ({ cases: [], _links: {} })
+        });
+
+        await client.getCasesRecursively(1, 1, { suite_id: '5', priority_id: '1' });
+
+        // Verify getSections was called with suite_id
+        expect(fetchMock).toHaveBeenCalledWith(
+            'https://testrail.io/index.php?/api/v2/get_sections/1&suite_id=5',
+            expect.any(Object)
+        );
+
+        // Verify getCases calls also include suite_id in filter (not stripped)
+        expect(fetchMock).toHaveBeenCalledWith(
+            expect.stringContaining('suite_id=5&priority_id=1'),
+            expect.any(Object)
+        );
+    });
+
+    test('getCasesRecursively without suite_id in filter calls getSections without suite_id', async () => {
+        const mockSections: Section[] = [
+            { id: 1, name: 'Root', parent_id: null, suite_id: 1, description: '' },
+        ];
+
+        fetchMock.mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({ sections: mockSections })
+        });
+
+        fetchMock.mockResolvedValue({
+            ok: true,
+            json: async () => ({ cases: [], _links: {} })
+        });
+
+        await client.getCasesRecursively(1, 1, { priority_id: '1' });
+
+        // Verify getSections was called without suite_id
+        expect(fetchMock).toHaveBeenCalledWith(
+            'https://testrail.io/index.php?/api/v2/get_sections/1',
+            expect.any(Object)
+        );
+    });
+
+    test('getProjects handles flat array response from older TestRail versions', async () => {
+        const mockProjects = [{ id: 1, name: 'Project 1' }, { id: 2, name: 'Project 2' }];
+        fetchMock.mockResolvedValue({
+            ok: true,
+            json: async () => mockProjects  // flat array, not { projects: [...] }
+        });
+
+        // Need a fresh client since getProjects caches
+        const freshClient = new TestRailClient('https://testrail.io/', 'user', 'apikey');
+        const result = await freshClient.getProjects();
+        expect(result).toEqual(mockProjects);
+    });
+
+    test('paginateAll handles flat array response from older TestRail versions', async () => {
+        const mockSuites = [{ id: 1, name: 'Suite 1' }, { id: 2, name: 'Suite 2' }];
+        fetchMock.mockResolvedValue({
+            ok: true,
+            json: async () => mockSuites  // flat array instead of { suites: [...], _links: {...} }
+        });
+
+        const result = await client.getSuites(1);
+        expect(result).toEqual(mockSuites);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    test('deleteCase sends POST request', async () => {
+        fetchMock.mockResolvedValue({
+            ok: true,
+            status: 200,
+            statusText: 'OK',
+            json: async () => ({}),
+            text: async () => ''
+        });
+
+        await client.deleteCase(42);
+        expect(fetchMock).toHaveBeenCalledWith(
+            'https://testrail.io/index.php?/api/v2/delete_case/42',
+            expect.objectContaining({ method: 'POST' })
+        );
+    });
+
+    test('addSuite posts suite details', async () => {
+        const mockSuite = { id: 1, name: 'New Suite', project_id: 1, url: 'http://url/1' };
+        fetchMock.mockResolvedValue({
+            ok: true,
+            json: async () => mockSuite
+        });
+
+        const result = await client.addSuite(1, { name: 'New Suite' });
+
+        expect(result).toEqual(mockSuite);
+        expect(fetchMock).toHaveBeenCalledWith(
+            'https://testrail.io/index.php?/api/v2/add_suite/1',
+            expect.objectContaining({
+                method: 'POST',
+                body: JSON.stringify({ name: 'New Suite' })
+            })
+        );
+    });
+
+    test('updateSuite posts updated suite details', async () => {
+        const mockSuite = { id: 5, name: 'Updated Suite', project_id: 1, url: 'http://url/5' };
+        fetchMock.mockResolvedValue({
+            ok: true,
+            json: async () => mockSuite
+        });
+
+        const result = await client.updateSuite(5, { name: 'Updated Suite' });
+
+        expect(result).toEqual(mockSuite);
+        expect(fetchMock).toHaveBeenCalledWith(
+            'https://testrail.io/index.php?/api/v2/update_suite/5',
+            expect.objectContaining({
+                method: 'POST',
+                body: JSON.stringify({ name: 'Updated Suite' })
+            })
+        );
+    });
+
+    test('getSharedSteps without options does not add refs param', async () => {
+        const mockSteps = [{ id: 1, title: 'Step 1' }];
+        fetchMock.mockResolvedValue({
+            ok: true,
+            json: async () => ({ shared_steps: mockSteps })
+        });
+
+        const result = await client.getSharedSteps(1);
+        expect(result).toEqual(mockSteps);
+        expect(fetchMock).toHaveBeenCalledWith(
+            'https://testrail.io/index.php?/api/v2/get_shared_steps/1',
+            expect.any(Object)
+        );
+    });
+
+    test('getCaseTypes caches result', async () => {
+        const mockData = [{ id: 1, name: 'Automated' }];
+        fetchMock.mockResolvedValue({
+            ok: true,
+            json: async () => mockData
+        });
+
+        await client.getCaseTypes();
+        await client.getCaseTypes();
+
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    test('getRuns without filter does not add query params', async () => {
+        const mockRuns = [{ id: 1, name: 'Run 1', project_id: 1 }];
+        fetchMock.mockResolvedValue({
+            ok: true,
+            json: async () => ({ runs: mockRuns })
+        });
+
+        const result = await client.getRuns(1);
+        expect(result).toEqual(mockRuns);
+        expect(fetchMock).toHaveBeenCalledWith(
+            'https://testrail.io/index.php?/api/v2/get_runs/1',
+            expect.any(Object)
+        );
+    });
+
+    test('getTests without statusId does not add status filter', async () => {
+        fetchMock.mockResolvedValue({
+            ok: true,
+            json: async () => ({ tests: [], _links: { next: null } })
+        });
+
+        await client.getTests(1);
+        expect(fetchMock).toHaveBeenCalledWith(
+            'https://testrail.io/index.php?/api/v2/get_tests/1',
+            expect.any(Object)
+        );
+    });
+
+    test('getTests with empty statusId array does not add status filter', async () => {
+        fetchMock.mockResolvedValue({
+            ok: true,
+            json: async () => ({ tests: [], _links: { next: null } })
+        });
+
+        await client.getTests(1, []);
+        expect(fetchMock).toHaveBeenCalledWith(
+            'https://testrail.io/index.php?/api/v2/get_tests/1',
+            expect.any(Object)
         );
     });
 });
