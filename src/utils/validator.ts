@@ -1,6 +1,26 @@
 import { CaseField } from "../tools/cases/types.js";
 import { SYSTEM_FIELDS, mapToFieldSchema } from "../tools/cases/get_case_fields.js";
 import { isActive } from "./sanitizer.js";
+import { TestRailClient } from "../client/testrail.js";
+
+const SUITE_MODE_MULTI = 3;
+
+/**
+ * Validates that suite_id is provided when the project uses multiple test suites (suite_mode=3).
+ * Throws a descriptive Error if suite_id is required but missing.
+ */
+export async function validateSuiteId(client: TestRailClient, projectId: number, suiteId: number | undefined): Promise<void> {
+    if (suiteId) return;
+
+    const project = await client.getProject(projectId);
+
+    if (project.suite_mode === SUITE_MODE_MULTI) {
+        throw new Error(
+            `Project "${project.name}" (id: ${project.id}) uses multiple test suites (suite_mode=3). ` +
+            `The suite_id parameter is required. Use get_suites to find available suites for this project.`
+        );
+    }
+}
 
 /**
  * Validates that the provided fields exist in the TestRail case schema.

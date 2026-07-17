@@ -3,6 +3,7 @@ import fs from "fs";
 import { TestRailClient } from "../../client/testrail.js";
 import { ToolDefinition } from "../../types/custom.js";
 import { SectionSchema } from "./types.js";
+import { validateSuiteId } from "../../utils/validator.js";
 
 const parameters = {
     project_id: z.number().describe("The ID of the project. Use get_projects to find available projects"),
@@ -16,6 +17,8 @@ export const getSectionsTool: ToolDefinition<typeof parameters, TestRailClient> 
     description: "Get all sections for a project. Returns section IDs and names that can be used with add_case",
     parameters,
     handler: async ({ project_id, suite_id, output_file }, client) => {
+        await validateSuiteId(client, project_id, suite_id);
+
         const sections = await client.getSections(project_id, suite_id);
 
         const response = {

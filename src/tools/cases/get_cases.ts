@@ -3,7 +3,7 @@ import fs from "fs";
 import { TestRailClient } from "../../client/testrail.js";
 import { ToolDefinition } from "../../types/custom.js";
 import { Case } from "./types.js";
-import { validateCaseFields } from "../../utils/validator.js";
+import { validateCaseFields, validateSuiteId } from "../../utils/validator.js";
 
 const parameters = {
     project_id: z.number().describe("The ID of the project. Use get_projects to find available projects"),
@@ -29,6 +29,8 @@ export const getCasesTool: ToolDefinition<typeof parameters, TestRailClient> = {
     description: "Get all test cases for a project. Filter by section, API params (priority, type), or any field including custom fields via 'where'. Returns case IDs, titles, and any additional requested fields.",
     parameters,
     handler: async ({ project_id, suite_id, section, filter, where, fields, output_file }, client) => {
+        await validateSuiteId(client, project_id, suite_id);
+
         const caseFields = await client.getCaseFields();
         if (fields) {
             validateCaseFields(fields, caseFields);

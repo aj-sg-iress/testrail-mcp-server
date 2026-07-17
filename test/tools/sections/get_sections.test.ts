@@ -21,7 +21,8 @@ describe('get_sections tool', () => {
             .mockResolvedValue(mockSections);
 
         mockClient = {
-            getSections: getSectionsMock
+            getSections: getSectionsMock,
+            getProject: jest.fn<any>().mockResolvedValue({ id: 1, name: 'Test Project', is_completed: false, suite_mode: 1 }),
         } as unknown as jest.Mocked<TestRailClient>;
     });
 
