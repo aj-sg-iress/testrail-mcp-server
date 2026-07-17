@@ -7,6 +7,7 @@ import { validateCaseFields } from "../../utils/validator.js";
 
 const parameters = {
     project_id: z.number().describe("The ID of the project. Use get_projects to find available projects"),
+    suite_id: z.number().optional().describe("The ID of the test suite (required for multi-suite projects, i.e. suite_mode=3). Use get_suites to find available suites"),
     section: z.object({
         id: z.number(),
         recursive: z.boolean().optional().default(false).describe("If true, fetches cases from the section and all its child sections"),
@@ -27,7 +28,7 @@ export const getCasesTool: ToolDefinition<typeof parameters, TestRailClient> = {
     mode: "read",
     description: "Get all test cases for a project. Filter by section, API params (priority, type), or any field including custom fields via 'where'. Returns case IDs, titles, and any additional requested fields.",
     parameters,
-    handler: async ({ project_id, section, filter, where, fields, output_file }, client) => {
+    handler: async ({ project_id, suite_id, section, filter, where, fields, output_file }, client) => {
         const caseFields = await client.getCaseFields();
         if (fields) {
             validateCaseFields(fields, caseFields);
@@ -35,6 +36,11 @@ export const getCasesTool: ToolDefinition<typeof parameters, TestRailClient> = {
 
         if (where) {
             validateCaseFields(Object.keys(where), caseFields);
+        }
+
+        // Inject suite_id into filter for multi-suite projects
+        if (suite_id) {
+            filter = { ...filter, suite_id: suite_id.toString() };
         }
 
         let cases: Case[];
