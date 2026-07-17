@@ -69,4 +69,34 @@ describe('get_sections tool', () => {
             getSectionsTool.handler({ project_id: 1 }, mockClient)
         ).rejects.toThrow('API Error');
     });
+
+    test('passes suite_id to client getSections', async () => {
+        const result = await getSectionsTool.handler({ project_id: 1, suite_id: 10 }, mockClient);
+
+        expect(result).toBeDefined();
+        expect(result.sections).toHaveLength(3);
+        expect(mockClient.getSections).toHaveBeenCalledWith(1, 10);
+    });
+
+    test('passes undefined suite_id when not provided', async () => {
+        const result = await getSectionsTool.handler({ project_id: 1 }, mockClient);
+
+        expect(result).toBeDefined();
+        expect(mockClient.getSections).toHaveBeenCalledWith(1, undefined);
+    });
+
+    test('exports suite_id parameter in tool definition', () => {
+        expect(getSectionsTool.parameters.suite_id).toBeDefined();
+    });
+
+    test('saves output to file with suite_id provided', async () => {
+        const result = await getSectionsTool.handler(
+            { project_id: 1, suite_id: 5, output_file: '/tmp/sections.json' },
+            mockClient
+        );
+
+        expect(result.success).toBe(true);
+        expect(result.file).toBe('/tmp/sections.json');
+        expect(mockClient.getSections).toHaveBeenCalledWith(1, 5);
+    });
 });

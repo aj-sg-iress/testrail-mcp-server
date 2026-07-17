@@ -156,4 +156,97 @@ describe('get_cases tool', () => {
         expect(parsed.cases).toHaveLength(3);
         expect(parsed.cases[0].title).toBe('Login test');
     });
+
+    test('injects suite_id into filter for multi-suite projects', async () => {
+        const result = await getCasesTool.handler(
+            { project_id: 1, suite_id: 10 },
+            mockClient
+        );
+
+        expect(result).toBeDefined();
+        expect(mockClient.getCases).toHaveBeenCalledWith(1, undefined, { suite_id: '10' });
+    });
+
+    test('injects suite_id into existing filter for multi-suite projects', async () => {
+        const result = await getCasesTool.handler(
+            { project_id: 1, suite_id: 10, filter: { priority_id: '1' } },
+            mockClient
+        );
+
+        expect(result).toBeDefined();
+        expect(mockClient.getCases).toHaveBeenCalledWith(1, undefined, { priority_id: '1', suite_id: '10' });
+    });
+
+    test('passes suite_id in filter to getCasesRecursively', async () => {
+        const result = await getCasesTool.handler(
+            { project_id: 1, suite_id: 10, section: { id: 5, recursive: true } },
+            mockClient
+        );
+
+        expect(result).toBeDefined();
+        expect(mockClient.getCasesRecursively).toHaveBeenCalledWith(1, 5, { suite_id: '10' }, undefined);
+    });
+
+    test('does not inject suite_id when not provided', async () => {
+        const result = await getCasesTool.handler(
+            { project_id: 1, filter: { priority_id: '2' } },
+            mockClient
+        );
+
+        expect(result).toBeDefined();
+        expect(mockClient.getCases).toHaveBeenCalledWith(1, undefined, { priority_id: '2' });
+    });
+
+    test('exports suite_id parameter in tool definition', () => {
+        expect(getCasesTool.parameters.suite_id).toBeDefined();
+    });
+
+    test('fields parameter excludes non-existent fields from output', async () => {
+        const result = await getCasesTool.handler(
+            { project_id: 1, fields: ['priority_id', 'custom_automation_status'] },
+            mockClient
+        );
+
+        // All cases should include the requested fields that exist
+        expect(result.cases[0]).toEqual({
+            id: 1,
+            title: 'Login test',
+            suite_id: 1,
+            priority_id: 2,
+            custom_automation_status: 1,
+        });
+    });
+
+    test('fields parameter skips fields not present on the case object', async () => {
+        // Mock a case missing certain fields
+        const sparseCase: Case[] = [
+            {
+                id: 10, title: 'Sparse case', section_id: 1, template_id: 1, type_id: 1,
+                priority_id: 2, milestone_id: null, refs: null, created_on: 1700000000,
+                updated_by: 1, updated_on: 1700000000, estimate: null,
+                suite_id: 1, labels: [], custom_automation_status: 1
+            },
+        ];
+        getCasesMock.mockResolvedValue(sparseCase);
+
+        // Override getCaseFields to include a nonexistent field
+        mockClient.getCaseFields = (jest.fn() as unknown as any).mockResolvedValue([
+            { system_name: 'priority_id', is_active: true, configs: [], include_all: true, template_ids: [] },
+            { system_name: 'nonexistent_field', is_active: true, configs: [], include_all: true, template_ids: [] },
+        ]);
+
+        const result = await getCasesTool.handler(
+            { project_id: 1, fields: ['priority_id', 'nonexistent_field'] },
+            mockClient
+        );
+
+        // nonexistent_field should not appear in the output
+        expect(result.cases[0]).toEqual({
+            id: 10,
+            title: 'Sparse case',
+            suite_id: 1,
+            priority_id: 2,
+        });
+        expect(result.cases[0]).not.toHaveProperty('nonexistent_field');
+    });
 });
