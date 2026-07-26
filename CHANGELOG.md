@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [2.2.0]
 
 ### Added
 - Add explicit boolean value guidance for Checkbox type to prevent the model from passing 0 or 1 values.
